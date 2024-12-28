@@ -1,64 +1,129 @@
-# ELT 数据工程项目
+# ELT Data Engineering Project
 
-这是一个基于 Docker 的数据工程项目，集成了 PostgreSQL、Airflow 和 DBT，用于实现端到端的数据处理流程。
+A modern data stack solution for end-to-end data processing, integrating PostgreSQL, Airflow, and DBT.
 
-## 项目架构
+## Architecture
 
-### 核心组件
+### Core Components
 
-1. **数据库服务**
-   - `source_postgres`: 源数据库 (端口 5433)
-   - `destination_postgres`: 目标数据库 (端口 5434)
-   - `postgres`: Airflow 元数据库
+#### 1. Data Storage Layer
+- **Source Database** (`source_postgres`)
+  - PostgreSQL instance
+  - Port: 5433
+  - Stores raw business data
+  
+- **Target Database** (`destination_postgres`)
+  - PostgreSQL instance
+  - Port: 5434
+  - Stores transformed analytical data
 
-2. **Airflow 服务**
-   - `webserver`: Airflow Web UI (端口 8080)
-   - `scheduler`: Airflow 调度器
-   - `init-airflow`: Airflow 初始化服务
+#### 2. Orchestration Layer
+- **Airflow**
+  - Web UI: Port 8080
+  - Scheduler service
+  - Task orchestration and monitoring
+  - Supports conditional branching and error retries
 
-3. **数据处理服务**
-   - ELT 脚本：用于数据提取和加载
-   - DBT：用于数据转换
+#### 3. Data Processing Layer
+- **ELT Script**
+  - Based on `pg_dump` and `psql`
+  - Supports incremental and full data migration
+  - Automated data extraction and loading
 
-## 功能特点
+- **DBT Transformations**
+  - Modular data transformations
+  - Built-in testing and documentation
+  - Version control and dependency management
 
-1. **数据迁移与转换**
-   - 支持从源数据库到目标数据库的数据迁移
-   - 使用 DBT 进行数据建模和转换
-   - 通过 Airflow DAGs 实现工作流程自动化
+### Data Flow
 
-2. **工作流编排**
-   - 使用 Airflow 管理和调度数据管道
-   - 支持任务依赖关系管理
-   - 提供可视化的任务监控界面
+Source DB (OLTP)
+↓ [ELT Script]
+Target DB (Stage)
+↓ [DBT Models]
+Analytics Views (Mart)
 
-3. **容器化部署**
-   - 所有组件都运行在 Docker 容器中
-   - 使用 Docker Compose 进行服务编排
-   - 确保环境一致性和可移植性
+## Features
 
-## 快速开始
+### 1. Data Pipeline
+- Automated data extraction and loading
+- Modular transformation using DBT
+- Real-time data processing via API
+- Data quality testing and validation
 
-### 前置要求
-- Docker
-- Docker Compose
-- 可用端口：5433, 5434, 8080
+### 2. Workflow Management
+- Conditional task execution
+- Automated error handling
+- Visual pipeline monitoring
+- REST API integration
 
-### 安装步骤
+### 3. Containerized Deployment
+- Docker-based services
+- Network isolation
+- Environment consistency
+- Easy scaling and deployment
 
-1. **启动服务**
-```
-
-2. **访问 Airflow**
-- URL: http://localhost:8080
-- 用户名: airflow
-- 密码: admin123
-
-### 目录结构
+## Project Structure
 elt/
 ├── airflow/
-│ └── dags/ # Airflow DAG 定义
-├── custom_postgres/ # DBT 项目文件
-├── elt_script/ # 数据处理脚本
-├── source_db_init/ # 源数据库初始化脚本
-└── docker-compose.yaml
+│ └── dags/ # Airflow DAG definitions
+├── api/ # REST API service
+├── custom_postgres/ # DBT project files
+│ ├── models/ # Data model definitions
+│ ├── macros/ # Reusable transformations
+│ └── tests/ # Data quality tests
+├── elt_script/ # Data migration scripts
+├── source_db_init/ # Source DB initialization
+└── docker-compose.yaml # Container orchestration
+
+## Quick Start
+
+### Prerequisites
+- Docker Engine 24.0+
+- Docker Compose 2.0+
+- Available ports: 5433, 5434, 8080, 5001
+- Disk space: 2GB minimum
+
+### Installation
+
+1. Clone the repository
+```
+
+2. Start services
+```
+bash
+docker-compose up -d
+```
+
+3. Access services
+- Airflow UI: http://localhost:8080
+  - Username: airflow
+  - Password: admin123
+- API Service: http://localhost:5001
+
+### Development Guide
+
+#### Adding New Models
+1. Create model file in `custom_postgres/models/`
+2. Update `schema.yml` with test rules
+3. Define sources in `sources.yml`
+4. Run `dbt run` to validate changes
+
+#### Modifying Data Flow
+1. Update `elt_script/elt_script.py`
+2. Modify `airflow/dags/elt_dag.py`
+3. Restart relevant services
+
+## Maintenance
+
+### Routine Tasks
+- Monitor Airflow task status
+- Check data quality test results
+- Clean historical data
+- Update model documentation
+
+### Troubleshooting
+- Check container logs
+- Verify database connections
+- Validate configurations
+- Retry failed tasks
