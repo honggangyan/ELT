@@ -1,0 +1,39 @@
+# PostgreSQL 命令行操作指南
+# =======================
+#
+# 用途：
+# - 连接到运行中的 PostgreSQL 容器
+# - 执行数据库操作和查询
+#
+# 常用命令：
+# 1. 连接数据库：
+#    docker exec -it <container> psql -U postgres
+#
+# 2. 数据库操作：
+#    \c <dbname>    - 切换数据库
+#    \dt            - 列出表
+#    \q             - 退出
+#
+# 注意：
+# - 确保容器正在运行
+# - 使用正确的容器名称
+# - 注意权限要求
+
+# 连接到正在运行的 Docker 容器中的 PostgreSQL
+# docker exec: 在运行中的容器内执行命令
+# -it: 以交互模式运行
+# elt-destination_postgres-1: 容器名称
+# psql: PostgreSQL 的命令行工具
+# -U postgres: 以 postgres 用户身份登录
+docker exec -it elt-destination_postgres-1 psql -U postgres
+
+# 在 PostgreSQL 命令行内
+# \c destination_db: 切换到 destination_db 数据库, connect to destination_db
+# 成功连接后会显示确认消息
+postgres=# \c destination_db 
+You are now connected to database "destination_db" as user "postgres".
+
+# 在 PostgreSQL 命令行内
+# \dt: 列出当前数据库中的所有表
+# 成功连接后会显示确认消息
+postgres=# \dt

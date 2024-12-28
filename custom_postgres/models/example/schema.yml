@@ -1,0 +1,85 @@
+# dbt schema文件用途:
+# - 定义数据模型结构和元数据
+# - 设置数据质量测试规则
+# - 提供模型文档说明
+# - 定义表间关系
+#
+# 在dbt项目中的作用：
+# - 通过 dbt test 命令执行数据测试
+# - 通过 dbt docs generate 生成项目文档
+# - 帮助团队理解数据模型的结构和用途
+# - 确保数据质量和一致性
+
+# 文件: schema.yml
+# 用途: 定义dbt模型的结构和测试规则
+#
+# 模型层级说明:
+# 1. staging层模型 (使用source()从原始数据读取)
+# 2. 中间层模型 (使用ref()引用其他模型)
+# 3. 最终层模型 (使用ref()构建最终分析结果)
+
+# 源数据层（Sources）
+#     ↓
+# 基础层（Staging）
+#     ↓
+# 整合层（Intermediate）
+#     ↓
+# 服务层（Mart）
+
+version: 2
+
+models:
+  - name: films_view
+    description: "View of films table"
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: source('destination_db', 'films')
+
+  - name: actors_view
+    description: "View of actors table"
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: source('destination_db', 'actors')
+
+  - name: film_actors_view
+    description: "View of film_actors table"
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: source('destination_db', 'film_actors')
+
+  - name: film_ratings
+    description: "Aggregated film ratings statistics"
+    columns:
+      - name: film_id
+        description: "Unique identifier for each film"
+        tests:
+          - not_null
+          - unique
+      - name: title
+        description: "Title of the film"
+        tests:
+          - not_null
+      - name: release_date
+        description: "Release date of the film"
+        tests:
+          - not_null
+      - name: price
+        description: "Price of the film"
+        tests:
+          - not_null
+      - name: rating
+        description: "Rating of the film"
+        tests:
+          - not_null
+      - name: user_rating
+        description: "User rating of the film"
+        tests:
+          - not_null
+      - name: actor_count
+        description: "Number of actors in the film"
+        tests:
+          - not_null
+      - name: average_rating
+        description: "Average rating of the film"
+        tests:
+          - not_null

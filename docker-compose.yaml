@@ -1,0 +1,417 @@
+# Docker 容器配置概览
+# ==================
+#
+# 1. source_postgres（源数据库）
+#    - 基础镜像: postgres:latest
+#    - 端口映射: 5433:5432
+#    - 数据库名: source_db
+#    - 挂载: ./source_db_init/init.sql -> /docker-entrypoint-initdb.d/init.sql
+#
+# 2. destination_postgres（目标数据库）
+#    - 基础镜像: postgres:latest
+#    - 端口映射: 5434:5432
+#    - 数据库名: destination_db
+#
+# 3. elt_script（数据处理服务）
+#    - 基础镜像: 自定义（基于 postgres:17.2-bookworm）
+#    - 功能组件: Python3 环境 + PostgreSQL 客户端
+#    - 主要任务: 执行 elt_script.py
+#
+# 4. dbt_script（数据转换服务）
+#    - 基础镜像: dbt-postgres:latest
+#    - 挂载: 
+#      * ./custom_postgres -> /dbt（DBT项目文件）
+#      * ~/.dbt -> /root（DBT配置文件）
+#
+# 数据卷（Volumes）说明
+# ===================
+# 
+# 挂载类型：双向同步
+# ---------------
+# - 容器内的更改会影响主机文件
+# - 主机上的更改会影响容器内文件
+#
+# 主要用途：
+# --------
+# 1. 配置文件共享：使容器能够读取主机上的配置
+# 2. 数据����化：确保容器删除后数据不丢失
+# 3. 开发便利性：允许在主机上直接编辑文件
+#
+# 安全考虑：
+# --------
+# - 谨慎选择挂载目录，避免暴露敏感数据
+# - 必要时使用只读挂载（:ro）保护数据
+#
+# 容器通信架构
+# ===========
+# - 网络连接: 共享 elt_network（bridge 模式）
+# - 依赖关系: elt_script 依赖于两个数据库容器
+#
+# 工作流程
+# =======
+# 1. 数据库初始化
+#    - source_postgres 和 destination_postgres 启动
+#    - 执行初始化脚本
+#
+# 2. 数据迁移
+#    - elt_script 等待数据库就绪
+#    - 执行数据迁移处理
+
+# PostgreSQL 端口映射说明
+# =====================
+#
+# 端口设计原则：
+# -------------
+# 1. 容器内部：保持默认端口 5432，容器有独立的网络空间，通过服务名区分：
+#    - 维持标准配置
+#    - 降低系统复杂度
+#    - 确保应用兼容性
+#
+# 2. 主机映射：使用不同端口，主机上的所有端口都在同一个网络命名空间中，一个端口同一时间只能被一个进程使用
+#    - source_postgres:      5433
+#    - destination_postgres: 5434
+#
+# 访问方式：
+# --------
+# 从主机访问：
+#   - source_postgres:      localhost:5433
+#   - destination_postgres: localhost:5434
+#
+# 从容器内访问：
+#   - source_postgres:      source_postgres:5432
+#   - destination_postgres: destination_postgres:5432
+
+
+# 指定 Docker Compose 文件版本
+version: '3'
+services:
+  # 源数据库服务配置
+  source_postgres:
+    # 使用最新版本的 PostgreSQL 镜像
+    image: postgres:latest
+    # 端口映射：主机端口5433映射到容器内部5432
+    # 这样可以通过 localhost:5433 访问源数据库
+    ports:
+      - 5433:5432
+    # 将服务连接到自定义网络，使容器间可以相互通信
+    networks:
+      - elt_network
+    # 设置 PostgreSQL 环境变量
+    environment:
+      POSTGRES_DB: source_db        # 源数据库名称
+      POSTGRES_USER: postgres       # 数据库用户名
+      POSTGRES_PASSWORD: secret     # 数据库密码（生产环境建议使用环境变量）
+    volumes:
+      - ./source_db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # 本地文件系统                    容器内
+      # ./source_db_init/init.sql  ->  /docker-entrypoint-initdb.d/init.sql
+      #                               |
+      #                               v
+      #                            PostgreSQL自动执行这个SQL文件
+      #-- 初始化脚本 (init.sql)
+      # -- ===================
+      # --
+      # -- 用途：
+      # -- 1. 在源数据库首次启动时自动执行
+      # -- 2. 创建必要的表结构
+      # -- 3. 插入初始数据
+      # --
+      # -- 执行时机：
+      # -- - 仅在数据库首次创建时执行
+      # -- - 如果数据库已存在则不会重新执行
+      # --
+      # -- 数据流向：
+      # # -- init.sql -> source_postgres -> elt_script -> destination_postgres
+
+
+  # 目标数据库服务配置
+  destination_postgres:
+    image: postgres:latest
+    ports:
+      - "5434:5432"
+    networks:
+      - elt_network
+    depends_on:
+      - source_postgres
+    environment:
+      POSTGRES_DB: destination_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+
+  # # ELT 脚本服务配置
+  # elt_script:
+  #   # 使用本地 Dockerfile 构建镜像
+  #   build:
+  #     context: ./elt              # 正确，因为 Dockerfile 在 elt/elt/ 目录下
+  #     dockerfile: Dockerfile # 使用指定 Dockerfile 文件构建镜像
+  #   # 容器启动时执行的命令
+  #   command: ["python3", "elt_script.py"]
+  #   # 确保脚本可以访问到其他服务
+  #   networks:
+  #     - elt_network
+  #   # 声明服务依赖关系，确保数据库服务先启动
+  #   depends_on:
+  #     - source_postgres
+  #     - destination_postgres
+  
+  # # DBT 服务配置
+  # dbt_script:
+  #   # 使用第三方 DBT PostgreSQL 镜像
+  #   image: ghcr.io/dbt-labs/dbt-postgres:1.7.3
+    
+  #   # ���行 DBT 命令
+  #   command: [
+  #     "run",                # 执行 DBT models
+  #     "--profiles-dir",     # 指定配置文件目录
+  #     "/root",             
+  #     "--project-dir",      # 指定项目目录
+  #     "/dbt"
+  #   ]
+  #     # 容器内的 /root 目录包含 profiles.yml
+  #     # 这个文件是通过 ~/.dbt:/root 挂载从主机复制来的
+  #     # 这个文件告诉dbt 如何连接到数据库， 使用什么用户名，密码，数据库名，schema
+      
+  #     # 项目文件位置 (/dbt)
+  #     # 容器内的 /dbt 目录包含 DBT 项目文件
+  #     # 这些文件是通过 ./custom_postgres:/dbt 挂载从主机复制来的
+  #     # 包含模型定义、转换逻辑等
+  #   networks:
+  #     - elt_network
+  #   volumes:
+  #     - ./custom_postgres:/dbt  
+  #     - ~/.dbt:/root           
+  #   depends_on:
+  #     elt_script:
+  #       condition: service_completed_successfully
+
+  #   environment:
+  #     - DBT_PROFILES=default
+  #     - DBT_TARGET=dev
+# 主机         挂载到 --->    容器
+# ./custom_postgres  <---> /dbt
+#     ├── models/           ├── models/
+#     ├── tests/            ├── tests/
+#     └── dbt_project.yml   └── dbt_project.yml
+# 主机       挂载到 --->  容器
+# ~/.dbt/        <---> /root/
+#     └── profiles.yml   └── profiles.yml
+
+# 具体执行：
+# 首先在 /root 目录找到数据库连接信息
+# 然后在 /dbt 目录找到要执行的转换逻辑
+# 最后在数据库中执行这些转换
+
+
+  # Airflow 元数据数据库服务
+  postgres:
+    image: postgres:latest
+    networks:
+      - elt_network
+    environment:
+      # 创建初始数据库和用户
+      - POSTGRES_DB=airflow      # Airflow 元数据库名称
+      - POSTGRES_USER=airflow    # 数据库访问用户
+      - POSTGRES_PASSWORD=airflow # 用户密码
+  
+  # Airflow 初始化服务
+  init-airflow:
+    image: apache/airflow:latest
+    depends_on:
+      - postgres  
+    networks:
+      - elt_network
+    environment:
+      # SQLAlchemy 数据库连接字符串
+      # postgresql+psycopg2://[用户名]:[密码]@[主机名]/[数据库名]
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      #                                                             |        |        |        |
+      #                                                             用户名     密码    服务名   数据库名
+      #                                                                             (容器名)
+      # 说明：
+      # - @postgres 指向 postgres 服务（Docker 服务发现）
+      # - /airflow 指��要连接的数据库名（对应 POSTGRES_DB）
+      # - 用户名和密码与 postgres 服务中的环境变量对应
+    command: >
+      bash -c '
+      sleep 10 &&
+      airflow db init &&
+      airflow users create \
+        --username airflow \
+        --firstname John \
+        --lastname Doe \
+        --role Admin \
+        --email admin@example.com \
+        --password admin123 &&
+      airflow users list &&
+      sleep 10
+      '
+
+
+# 1. Webserver (Airflow容器)
+#    ↓
+#    提供Web界面让你创建和管理任务
+   
+# 2. Scheduler (Airflow容器)
+#    ↓
+#    负责调度和执行任务
+#    ↓
+#    通过 docker.sock
+#    ↓
+#    Docker守护进程
+#    ↓
+#    创建新容器运行具体任务
+
+  # Airflow Web 服务器配置
+  webserver:
+    # 1. 构建配置
+    build:
+      context: .              # 构建的位置：当前目录
+      dockerfile: Dockerfile  # 使用哪个"建筑图纸"(Dockerfile)
+    # 2. 用户权限
+    user: root               # 使用最高权限用户
+    # 3. 依赖关系
+    depends_on:
+      postgres:
+        condition: service_started
+      init-airflow:
+        condition: service_completed_successfully
+    # 4. 网络配置
+    networks:
+      - elt_network         # 加入公司内网
+    # 5. 主机映射
+    extra_hosts:            
+      - "host.docker.internal:host-gateway"  # 允许访问主机
+                                            # 相当于配置访问外部世界的通道
+    # 6. 文件目录映射（就像办公室里的文件柜）
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags           # 工作流程文件柜
+      - ./elt_script:/opt/airflow/elt_script                     # 数据处理脚本柜
+      - ./custom_postgres:/opt/dbt                  # 数据转换配置柜
+      - ~/.dbt:/root/.dbt                          # DBT配置文件柜
+      - /var/run/docker.sock:/var/run/docker.sock  # 物业对讲机
+    # 7. 环境变量（办公室的基本设置）
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW_CONN_DESTINATION_POSTGRES=postgres://postgres:secret@destination_postgres:5432/destination_db
+      - AIRFLOW__CORE__FERNET_KEY=8RKrZu8kk1YTBd66TgwaBvWhT0fMYO-jye0ah_4_Mzw=
+      - AIRFLOW__WEBSERVER__SECRET_KEY=secret
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.providers.fab.auth_manager.api.auth.backend.basic_auth
+    ports:
+      - 8080:8080
+    command: airflow webserver
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    depends_on:
+      postgres:
+        condition: service_started
+      init-airflow:
+        condition: service_completed_successfully
+    networks:
+      - elt_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./elt_script:/opt/airflow/elt_script
+      - ./custom_postgres:/opt/dbt
+      - ~/.dbt:/root/.dbt
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW_CONN_DESTINATION_POSTGRES=postgres://postgres:secret@destination_postgres:5432/destination_db
+      - AIRFLOW__CORE__FERNET_KEY=8RKrZu8kk1YTBd66TgwaBvWhT0fMYO-jye0ah_4_Mzw=
+      - AIRFLOW__WEBSERVER__SECRET_KEY=secret
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.providers.fab.auth_manager.api.auth.backend.basic_auth
+    command: airflow scheduler
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    networks:
+      - elt_network
+    depends_on:
+      - destination_postgres
+      - webserver
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+
+# 容器通信架构
+# ===========
+# - 网络连接: 共享 elt_network（bridge 模式）
+# - 依赖关系: elt_script 依赖于两个数据库容器
+networks:
+  elt_network:
+    driver: bridge
+
+# DBT 挂载说明
+# ===========
+#
+# DBT 服务使用两个关键挂载：
+#
+# 1. 项目文件挂载 (./custom_postgres:/dbt)
+#    用途：
+#    - 存放 DBT 转换逻辑和项目配置
+#    - 允许实时编辑模型文件
+#    - 保存编译后的 SQL 和运行结果
+#    
+#    必要性：
+#    - 没有此挂载，每次修改模型都需要重建容器
+#    - DBT 编译和运行的结果无法持久化保存
+#    - 无法实现持续集成/持续部署（CI/CD）
+#    - 调试和开发效率会显著降低
+#    
+#    目录结构：
+#    ./custom_postgres/
+#    ├── models/     # SQL 转换逻辑
+#    ├── tests/      # 数据测试定义
+#    └── dbt_project.yml  # 项目配置
+#
+# 2. 配置文件挂载 (~/.dbt:/root)
+#    用途：
+#    - 存放数据库连接信息
+#    - 管理不同环境的配置
+#    - 安全存储认证信息
+#    
+#    必要性：
+#    - 避免在容器或代码中硬编码敏感信息
+#    - 支持多环境配置（开发/测试/生产）
+#    - 符合安全最佳实践���配置与代码分离
+#    - 允许在不重建容器的情况下更改数据库配置
+#    
+#    文件结构：
+#    ~/.dbt/
+#    └── profiles.yml  # 数据库连接配置
+#
+# 挂载工作流程：
+# ------------
+# 1. 开发流程：
+#    主机 (编辑) -> 容器 (执行) -> 主机 (保存结果)
+#
+# 2. 配置管理：
+#    profiles.yml 提供数据库连接信息
+#    与项目代码分离，提高安全性
+#
+# 如果没有这些挂载：
+# ---------------
+# 1. 开发效率问题：
+#    - 每次代码修改都需要重建容器
+#    - 无法实时查看运行结果
+#    - 调试过程变得复杂
+#
+# 2. 安全风险：
+#    - 可能需要在代码中包含敏感信息
+#    - 难以管理多环境配置
+#    - 凭据可能被意外提交到版本控制
+#
+# 3. 维护困难：
+#    - 配置更改需要重新构建镜像
+#    - 难以实现自动化部署
+#    - 无法保留历史运行记录

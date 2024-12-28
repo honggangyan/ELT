@@ -1,0 +1,74 @@
+# 文件: sources.yml
+# 用途: 定义原始数据源配置
+#
+# 数据流向说明:
+# 1. 原始数据表 (通过source()访问)
+# 2. staging层模型 (如 films.sql)
+# 3. 后续转换层 (如 film_ratings.sql)
+#
+# source定义的重要性:
+# 1. 为原始数据表提供统一的访问接口
+# 2. 允许在staging层使用source()函数
+# 3. 便于管理和维护数据源配置
+# 4. 支持数据源文档化和测试
+
+version: 2
+
+sources:
+  - name: destination_db
+    description: "Destination PostgreSQL database"
+    database: "destination_db"
+    schema: "public"
+    tables:
+      - name: films
+        description: "List of films"
+        columns:
+          - name: film_id
+            description: "Primary key"
+            tests:
+              - unique
+              - not_null
+          - name: title
+            description: "Film title"
+            tests:
+              - not_null
+          - name: release_date
+            description: "Release date"
+            tests:
+              - not_null
+          - name: price
+            tests:
+              - not_null
+          - name: rating
+            tests:
+              - not_null
+          - name: user_rating
+            tests:
+              - not_null
+
+      - name: actors
+        description: "List of actors"
+        columns:
+          - name: actor_id
+            tests:
+              - unique
+              - not_null
+          - name: actor_name
+            tests:
+              - not_null
+
+      - name: film_actors
+        description: "Film-actor relationships"
+        columns:
+          - name: film_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('destination_db', 'films')
+                  field: film_id
+          - name: actor_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('destination_db', 'actors')
+                  field: actor_id 

@@ -1,0 +1,10 @@
+# 数据库连接
+psycopg2-binary>=2.9.9    # PostgreSQL 数据库适配器
+
+# 开发工具
+black>=24.2.0             # 代码格式化
+flake8>=7.0.0            # 代码检查
+pytest>=8.0.0            # 测试框架
+
+# 其他依赖
+python-dotenv>=1.0.0     # 环境变量管理 
