@@ -64,17 +64,19 @@ Analytics Views (Mart)
 - Easy scaling and deployment
 
 ## Project Structure
-elt/
-├── airflow/
-│ └── dags/ # Airflow DAG definitions
-├── api/ # REST API service
-├── custom_postgres/ # DBT project files
-│ ├── models/ # Data model definitions
-│ ├── macros/ # Reusable transformations
-│ └── tests/ # Data quality tests
-├── elt_script/ # Data migration scripts
-├── source_db_init/ # Source DB initialization
-└── docker-compose.yaml # Container orchestration
+
+```
+📦 elt
+ ┣ 📂 airflow
+ ┃ ┗ 📂 dags         # Airflow DAG 定义文件
+ ┣ 📂 api            # REST API 服务
+ ┣ 📂 custom_postgres # DBT 项目文件
+ ┃ ┣ 📂 models       # 数据模型定义
+ ┃ ┣ 📂 macros       # 可重用转换逻辑
+ ┃ ┗ 📂 tests        # 数据质量测试
+ ┣ 📂 elt_script     # 数据迁移脚本
+ ┣ 📂 source_db_init # 源数据库初始化
+ ┗ 📜 docker-compose.yaml # 容器编排配置
 
 ## Quick Start
 
