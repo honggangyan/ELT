@@ -77,7 +77,7 @@ Analytics Views (Mart)
  ┣ 📂 elt_script     # 数据迁移脚本
  ┣ 📂 source_db_init # 源数据库初始化
  ┗ 📜 docker-compose.yaml # 容器编排配置
-
+```
 ## Quick Start
 
 ### Prerequisites
@@ -89,7 +89,6 @@ Analytics Views (Mart)
 ### Installation
 
 1. Clone the repository
-```
 
 2. Start services
 ```
